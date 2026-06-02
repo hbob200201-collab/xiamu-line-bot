@@ -10,7 +10,6 @@ const config = {
 
 const client = new line.Client(config);
 const app = express();
-
 const parkingData = require("./parkingData.json");
 
 const records = {
@@ -22,11 +21,27 @@ const records = {
   parkingQueries: []
 };
 
+// 重要：LINE webhook 必須放在 express.json() 前面，避免 500 驗證錯誤
+app.post("/webhook", line.middleware(config), async (req, res) => {
+  try {
+    await Promise.all(req.body.events.map(handleEvent));
+    res.status(200).end();
+  } catch (err) {
+    console.error("Webhook error:", err);
+    res.status(500).end();
+  }
+});
+
+// 後台與 API 才使用 JSON
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
 app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
+});
+
+app.get("/health", (req, res) => {
+  res.status(200).send("OK");
 });
 
 app.get("/api/summary", (req, res) => {
@@ -53,34 +68,6 @@ app.get("/api/parking", (req, res) => {
   const q = String(req.query.q || "").trim();
   if (!q) return res.json(parkingData.slice(0, 300));
   res.json(searchParking(q));
-});
-
-app.post("/api/repair", (req, res) => {
-  const now = timeNow();
-  const rec = {
-    id: `R-${dateId()}-${String(records.repairs.length + 1).padStart(3, "0")}`,
-    time: now,
-    name: req.body.name || "後台",
-    content: req.body.content || "",
-    parsed: {
-      location: req.body.location || "",
-      category: req.body.category || "一般報修",
-      issue: req.body.issue || req.body.content || ""
-    },
-    status: "未處理"
-  };
-  records.repairs.unshift(rec);
-  res.json(rec);
-});
-
-app.post("/webhook", line.middleware(config), async (req, res) => {
-  try {
-    await Promise.all(req.body.events.map(handleEvent));
-    res.status(200).end();
-  } catch (err) {
-    console.error(err);
-    res.status(500).end();
-  }
 });
 
 async function handleEvent(event) {
@@ -209,11 +196,9 @@ function parseLocation(text) {
 function looksLikeRepair(text) {
   return /(報修|故障|壞|破|漏水|滲水|堵塞|不亮|燈|電|跳電|水|門|鎖|對講機|電梯|消防|排水|馬桶|異音|設備|維修|修繕|空調|冷氣|發霉|天花板|牆面|地板)/.test(text);
 }
-
 function looksLikeIncident(text) {
   return /(異常|事件|糾紛|爭議|吵架|衝突|臨停|違停|噪音|闖入|可疑|受傷|跌倒|火警|誤報|警報|防火|打架|住戶反映|投訴|客訴|緊急)/.test(text);
 }
-
 function looksLikeHandover(text) {
   return /(交接|待辦|追蹤|未完成|今日重點|提醒|明日|晚班|早班|中班|夜班|續辦|需注意)/.test(text);
 }
@@ -232,7 +217,6 @@ function createRepair(text, name, now) {
 類別：${parsed.category}
 說明：${parsed.issue || text}`;
 }
-
 function createIncident(text, name, now) {
   const parsed = parseIncident(text);
   const id = `E-${dateId()}-${String(records.incidents.length + 1).padStart(3, "0")}`;
@@ -245,7 +229,6 @@ function createIncident(text, name, now) {
 地點：${parsed.location || "未判讀"}
 事件：${parsed.issue || text}`;
 }
-
 function createHandover(text, name, now) {
   const parsed = parseHandover(text);
   records.handovers.unshift({ time: now, name, content: text, parsed });
@@ -269,13 +252,11 @@ function parseRepair(text) {
   const issue = text.replace(location, "").replace(/^報修[:：]?\s*/, "").trim();
   return { location, category, issue };
 }
-
 function parseIncident(text) {
   const location = parseLocation(text);
   const issue = text.replace(location, "").replace(/^異常事件[:：]?\s*/, "").trim();
   return { location, issue };
 }
-
 function parseHandover(text) {
   const m = text.match(/早班|中班|晚班|夜班/);
   const shift = m ? m[0] : "";
@@ -293,7 +274,6 @@ function directLeave(name, now) {
 
 返回時請按「上哨」。`;
 }
-
 function directDuty(name, now) {
   records.duty.unshift({ time: now, name, content: "圖文選單直接登記上哨" });
   return `👮 上哨已登記
@@ -303,19 +283,15 @@ function directDuty(name, now) {
 狀態：已返回崗位`;
 }
 
-function helpRepair() {
-  return `🔧【智能報修】
+function helpRepair(){return `🔧【智能報修】
 
 直接輸入戶別/樓層/位置 + 問題：
 
 A3-22 漏水
 A棟3樓燈不亮
 B1車道排水堵塞
-電梯有異音`;
-}
-
-function helpParking() {
-  return `🚗【智能車位查詢】
+電梯有異音`;}
+function helpParking(){return `🚗【智能車位查詢】
 
 可輸入：
 
@@ -326,36 +302,26 @@ B2-124
 機車位215
 車位查詢 267
 
-可查：戶別、門牌、汽車位、機車位。`;
-}
-
-function helpIncident() {
-  return `🚨【異常事件】
+可查：戶別、門牌、汽車位、機車位。`;}
+function helpIncident(){return `🚨【異常事件】
 
 直接輸入：
 B1車道住戶臨停爭議
 大廳住戶吵架
-消防警報誤報`;
-}
-
-function helpHandover() {
-  return `📋【交接回報】
+消防警報誤報`;}
+function helpHandover(){return `📋【交接回報】
 
 直接輸入：
 交接 早班 B1臨停需追蹤
-夜班 電梯異音明日通知廠商`;
-}
-
-function mainMenu() {
-  return `夏沐物業LINE系統
+夜班 電梯異音明日通知廠商`;}
+function mainMenu(){return `夏沐物業LINE系統
 
 報修：戶別/樓層 + 問題
 車位查詢：戶別/門牌/汽車位/機車位
 離哨：按休息離哨
 上哨：按上哨
 異常：輸入事件內容
-交接：輸入交接事項`;
-}
+交接：輸入交接事項`;}
 
 function searchParking(keyword) {
   if (!keyword) return [];
@@ -375,11 +341,9 @@ function searchParking(keyword) {
     );
   }).slice(0, 10);
 }
-
 function parkingSearchReply(keyword) {
   const found = searchParking(keyword);
   if (!found.length) return `查無車位資料：${keyword}`;
-
   return found.map(x =>
     `🚗【車位查詢結果】
 戶別：${x.unit}
@@ -389,7 +353,6 @@ function parkingSearchReply(keyword) {
 機車位：${x.moto}`
   ).join("\n\n");
 }
-
 function expandMotoRange(moto) {
   if (!moto) return [];
   const s = String(moto).replace("－", "-");
@@ -401,7 +364,6 @@ function expandMotoRange(moto) {
   arr.push(s);
   return arr;
 }
-
 async function getDisplayName(userId) {
   try {
     const profile = await client.getProfile(userId);
@@ -410,19 +372,16 @@ async function getDisplayName(userId) {
     return userId || "未知人員";
   }
 }
-
 function reply(replyToken, text) {
   return client.replyMessage(replyToken, { type: "text", text });
 }
-
 function timeNow() {
   return new Date().toLocaleString("zh-TW", { timeZone: "Asia/Taipei" });
 }
-
 function dateId() {
   const d = new Date();
   return `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,"0")}${String(d.getDate()).padStart(2,"0")}`;
 }
 
 const port = process.env.PORT || 3000;
-app.listen(port, () => console.log(`Xiamu LINE Bot V10 Admin Integrated running on port ${port}`));
+app.listen(port, () => console.log(`Xiamu LINE Bot V11 Webhook Fix running on port ${port}`));

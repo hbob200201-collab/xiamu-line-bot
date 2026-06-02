@@ -1,7 +1,7 @@
 {
-  "name": "xiamu-line-bot-v10-admin-integrated",
-  "version": "10.0.0",
-  "description": "遠雄夏沐物業 LINE Bot V10 後台整合版",
+  "name": "xiamu-line-bot-v11-webhook-fix",
+  "version": "11.0.0",
+  "description": "遠雄夏沐物業 LINE Bot V11 Webhook 500 修正版",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"

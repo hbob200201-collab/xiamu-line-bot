@@ -1,3 +1,3 @@
-# 遠雄夏沐物業 LINE Bot V10 後台整合版
+# V11 Webhook 500 修正版
 
-首頁會顯示統整後台，Webhook 維持 /webhook。
+修正 LINE Verify 500：Webhook 放在 express.json() 前面。
