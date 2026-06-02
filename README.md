@@ -1,3 +1,3 @@
-# V11 Webhook 500 修正版
+# V12 後台版面修正版
 
-修正 LINE Verify 500：Webhook 放在 express.json() 前面。
+修正左側選單蓋住內容、頁面被切到、手機版跑版、表格橫向捲動。

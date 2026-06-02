@@ -1,5 +1,266 @@
-<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>遠雄夏沐物業統整後台</title><style>
-body{margin:0;background:#f5f7f6;color:#17221d;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans TC","Microsoft JhengHei",sans-serif}.app{display:flex;min-height:100vh}aside{width:260px;background:#0f2a1f;color:white;padding:20px;position:fixed;inset:0 auto 0 0}.brand{font-weight:850;font-size:23px;line-height:1.25;margin-bottom:20px}.brand small{display:block;color:#b7d5c7;font-weight:500;font-size:13px;margin-top:6px}.nav button{width:100%;border:0;background:transparent;color:#e9fff3;text-align:left;padding:13px 12px;border-radius:12px;font-size:15px;margin:3px 0;cursor:pointer}.nav button.active,.nav button:hover{background:#1b4b35}main{margin-left:260px;padding:24px;width:calc(100% - 260px)}h1{font-size:26px;margin:0 0 18px}.btn{border:1px solid #e4ebe7;background:#0b7f46;color:#fff;border-radius:12px;padding:10px 14px;cursor:pointer;font-weight:700}.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:16px}.card{background:#fff;border:1px solid #e4ebe7;border-radius:18px;padding:16px;box-shadow:0 6px 20px rgba(15,42,31,.05)}.label{color:#718076;font-size:13px}.num{font-size:32px;font-weight:850;margin-top:8px}.section{display:none}.section.active{display:block}input{border:1px solid #e4ebe7;border-radius:12px;padding:10px 12px;font-size:15px;background:#fff;min-width:300px;margin-bottom:12px}table{width:100%;border-collapse:separate;border-spacing:0;background:#fff;border:1px solid #e4ebe7;border-radius:16px;overflow:hidden}th,td{padding:12px;border-bottom:1px solid #e4ebe7;text-align:left;font-size:14px;vertical-align:top}th{background:#f0f6f2;color:#33483d;font-size:13px}tr:last-child td{border-bottom:0}.notice{background:#fffbe7;border:1px solid #f2df9b;color:#6c5200;border-radius:14px;padding:12px;margin-bottom:12px}@media(max-width:900px){aside{position:static;width:100%;height:auto}.app{display:block}main{margin-left:0;width:100%;padding:14px}.grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
-</style></head><body><div class="app"><aside><div class="brand">遠雄夏沐<br>物業統整後台<small>LINE Bot × 車位 × 勤務紀錄</small></div><div class="nav"><button class="active" data-sec="dashboard">📊 首頁總覽</button><button data-sec="repairs">🔧 報修管理</button><button data-sec="leave">☕ 休息離哨</button><button data-sec="duty">👮 上哨紀錄</button><button data-sec="incidents">🚨 異常事件</button><button data-sec="handover">📋 交接回報</button><button data-sec="parking">🚗 車位資料</button></div></aside><main><h1 id="title">首頁總覽</h1><button class="btn" onclick="loadAll()">重新整理</button><section id="dashboard" class="section active"><div class="grid"><div class="card"><div class="label">報修</div><div class="num" id="s-repairs">0</div></div><div class="card"><div class="label">休息離哨</div><div class="num" id="s-leave">0</div></div><div class="card"><div class="label">上哨</div><div class="num" id="s-duty">0</div></div><div class="card"><div class="label">異常事件</div><div class="num" id="s-incidents">0</div></div></div><div class="card"><h2>系統狀態</h2><div id="summary"></div></div></section><section id="repairs" class="section"><div id="t-repairs"></div></section><section id="leave" class="section"><div id="t-leave"></div></section><section id="duty" class="section"><div id="t-duty"></div></section><section id="incidents" class="section"><div id="t-incidents"></div></section><section id="handover" class="section"><div id="t-handover"></div></section><section id="parking" class="section"><div class="notice">可搜尋戶別、門牌、所有權人、汽車位、機車位。</div><input id="q-parking" oninput="searchParking()" placeholder="例如 A3-22、267、B2-124、215、翁紹銘"><div id="t-parking"></div></section></main></div><script>
-let summary={latest:{}};function esc(s){return String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[m]));}document.querySelectorAll(".nav button").forEach(b=>{b.onclick=()=>{document.querySelectorAll(".nav button").forEach(x=>x.classList.remove("active"));document.querySelectorAll(".section").forEach(x=>x.classList.remove("active"));b.classList.add("active");document.getElementById(b.dataset.sec).classList.add("active");document.getElementById("title").textContent=b.textContent.trim();if(b.dataset.sec==="parking")searchParking();}});function table(rows,cols){if(!rows||!rows.length)return'<div class="card">目前沒有資料。</div>';return `<table><thead><tr>${cols.map(c=>`<th>${c[0]}</th>`).join("")}</tr></thead><tbody>`+rows.map(r=>`<tr>${cols.map(c=>`<td>${esc(typeof c[1]==="function"?c[1](r):r[c[1]])}</td>`).join("")}</tr>`).join("")+`</tbody></table>`}async function loadAll(){const res=await fetch('/api/summary');summary=await res.json();render();}function render(){document.getElementById("s-repairs").textContent=summary.repairs||0;document.getElementById("s-leave").textContent=summary.leave||0;document.getElementById("s-duty").textContent=summary.duty||0;document.getElementById("s-incidents").textContent=summary.incidents||0;document.getElementById("summary").innerHTML=`<p>🚗 車位資料：${summary.parkingTotal||0} 筆</p><p>📋 交接：${summary.handovers||0} 筆</p><p>LINE 回報後請按「重新整理」。</p>`;const L=summary.latest||{};document.getElementById("t-repairs").innerHTML=table(L.repairs||[],[["時間","time"],["回報人","name"],["位置",x=>x.parsed?.location||""],["類別",x=>x.parsed?.category||""],["內容","content"],["狀態","status"]]);document.getElementById("t-leave").innerHTML=table(L.leave||[],[["時間","time"],["人員","name"],["內容","content"]]);document.getElementById("t-duty").innerHTML=table(L.duty||[],[["時間","time"],["人員","name"],["內容","content"]]);document.getElementById("t-incidents").innerHTML=table(L.incidents||[],[["時間","time"],["回報人","name"],["地點",x=>x.parsed?.location||""],["事件",x=>x.parsed?.issue||x.content]]);document.getElementById("t-handover").innerHTML=table(L.handovers||[],[["時間","time"],["回報人","name"],["班別",x=>x.parsed?.shift||""],["內容","content"]]);}async function searchParking(){const q=document.getElementById("q-parking").value;const res=await fetch('/api/parking?q='+encodeURIComponent(q));const rows=await res.json();document.getElementById("t-parking").innerHTML=table(rows,[["戶別","unit"],["門牌","door"],["樓層","floor"],["所有權人","owner"],["汽車位","car"],["機車位","moto"]]);}loadAll();
-</script></body></html>
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>遠雄夏沐物業統整後台</title>
+<style>
+:root{
+  --bg:#f5f7f6;
+  --card:#ffffff;
+  --text:#17221d;
+  --muted:#718076;
+  --green:#0b7f46;
+  --dark:#0f2a1f;
+  --dark2:#1b4b35;
+  --line:#e4ebe7;
+}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans TC","Microsoft JhengHei",sans-serif;background:var(--bg);color:var(--text);overflow-x:hidden}
+.layout{display:flex;min-height:100vh;width:100%}
+.sidebar{
+  position:fixed;
+  left:0;
+  top:0;
+  bottom:0;
+  width:280px;
+  background:linear-gradient(180deg,#0f2a1f,#092018);
+  color:#fff;
+  padding:22px 16px;
+  overflow-y:auto;
+  z-index:10;
+}
+.brand{font-weight:900;font-size:28px;line-height:1.25;margin-bottom:10px;letter-spacing:.5px}
+.subtitle{color:#b7d5c7;font-size:14px;font-weight:650;margin-bottom:28px}
+.nav button{
+  width:100%;
+  display:block;
+  border:0;
+  background:transparent;
+  color:#eefcf4;
+  text-align:left;
+  padding:14px 16px;
+  border-radius:16px;
+  font-size:16px;
+  font-weight:800;
+  margin:7px 0;
+  cursor:pointer;
+}
+.nav button.active,.nav button:hover{background:rgba(57,127,88,.55)}
+.main{
+  margin-left:280px;
+  width:calc(100% - 280px);
+  min-height:100vh;
+  padding:28px;
+}
+.topbar{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:16px;
+  margin-bottom:20px;
+  flex-wrap:wrap;
+}
+h1{font-size:32px;margin:0;font-weight:900}
+.btn{
+  background:var(--green);
+  color:#fff;
+  border:0;
+  border-radius:14px;
+  padding:12px 18px;
+  font-size:15px;
+  font-weight:850;
+  cursor:pointer;
+}
+.grid{display:grid;grid-template-columns:repeat(4,minmax(160px,1fr));gap:16px;margin-bottom:18px}
+.card{
+  background:var(--card);
+  border:1px solid var(--line);
+  border-radius:20px;
+  padding:18px;
+  box-shadow:0 8px 24px rgba(15,42,31,.06);
+}
+.label{color:var(--muted);font-size:14px;font-weight:750}
+.num{font-size:36px;font-weight:950;margin-top:10px;color:#0f2a1f}
+.section{display:none}
+.section.active{display:block}
+.notice{background:#fffbe7;border:1px solid #f2df9b;color:#6c5200;border-radius:16px;padding:14px;margin-bottom:14px;font-weight:700}
+.search{
+  width:min(520px,100%);
+  border:1px solid var(--line);
+  border-radius:14px;
+  padding:12px 14px;
+  font-size:16px;
+  margin:0 0 14px;
+}
+.table-wrap{
+  width:100%;
+  overflow-x:auto;
+  border-radius:18px;
+  border:1px solid var(--line);
+  background:#fff;
+}
+table{
+  width:100%;
+  min-width:820px;
+  border-collapse:collapse;
+  background:#fff;
+}
+th,td{
+  padding:13px 14px;
+  border-bottom:1px solid var(--line);
+  text-align:left;
+  font-size:15px;
+  white-space:nowrap;
+}
+th{background:#eef6f1;color:#33483d;font-weight:900}
+tr:last-child td{border-bottom:0}
+.empty{background:#fff;border:1px solid var(--line);border-radius:18px;padding:22px;color:#718076;font-weight:800}
+@media(max-width:1000px){
+  .sidebar{width:240px}
+  .main{margin-left:240px;width:calc(100% - 240px);padding:20px}
+  .grid{grid-template-columns:repeat(2,minmax(140px,1fr))}
+  h1{font-size:28px}
+}
+@media(max-width:760px){
+  .layout{display:block}
+  .sidebar{
+    position:relative;
+    width:100%;
+    height:auto;
+    bottom:auto;
+    padding:18px 14px;
+  }
+  .brand{font-size:25px}
+  .nav{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+  .nav button{font-size:15px;margin:0;padding:12px}
+  .main{margin-left:0;width:100%;padding:16px}
+  .grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+  .card{padding:14px;border-radius:16px}
+  .num{font-size:30px}
+  h1{font-size:25px}
+  table{min-width:760px}
+}
+</style>
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="brand">遠雄夏沐<br>物業統整後台</div>
+    <div class="subtitle">LINE Bot × 車位 × 勤務紀錄</div>
+    <nav class="nav">
+      <button class="active" data-sec="dashboard">📊 首頁總覽</button>
+      <button data-sec="repairs">🔧 報修管理</button>
+      <button data-sec="leave">☕ 休息離哨</button>
+      <button data-sec="duty">👮 上哨紀錄</button>
+      <button data-sec="incidents">🚨 異常事件</button>
+      <button data-sec="handover">📋 交接回報</button>
+      <button data-sec="parking">🚗 車位資料</button>
+    </nav>
+  </aside>
+
+  <main class="main">
+    <div class="topbar">
+      <h1 id="title">首頁總覽</h1>
+      <button class="btn" onclick="loadAll()">重新整理</button>
+    </div>
+
+    <section id="dashboard" class="section active">
+      <div class="grid">
+        <div class="card"><div class="label">報修</div><div class="num" id="s-repairs">0</div></div>
+        <div class="card"><div class="label">休息離哨</div><div class="num" id="s-leave">0</div></div>
+        <div class="card"><div class="label">上哨</div><div class="num" id="s-duty">0</div></div>
+        <div class="card"><div class="label">異常事件</div><div class="num" id="s-incidents">0</div></div>
+      </div>
+      <div class="card">
+        <h2>系統狀態</h2>
+        <div id="summary">讀取中...</div>
+      </div>
+    </section>
+
+    <section id="repairs" class="section"><div id="t-repairs"></div></section>
+    <section id="leave" class="section"><div id="t-leave"></div></section>
+    <section id="duty" class="section"><div id="t-duty"></div></section>
+    <section id="incidents" class="section"><div id="t-incidents"></div></section>
+    <section id="handover" class="section"><div id="t-handover"></div></section>
+
+    <section id="parking" class="section">
+      <div class="notice">可搜尋戶別、門牌、所有權人、汽車位、機車位。</div>
+      <input class="search" id="q-parking" oninput="searchParking()" placeholder="例如 A3-22、267、B2-124、215、翁紹銘">
+      <div id="t-parking"></div>
+    </section>
+  </main>
+</div>
+
+<script>
+let summary={latest:{}};
+
+function esc(s){
+  return String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[m]));
+}
+
+document.querySelectorAll(".nav button").forEach(b=>{
+  b.onclick=()=>{
+    document.querySelectorAll(".nav button").forEach(x=>x.classList.remove("active"));
+    document.querySelectorAll(".section").forEach(x=>x.classList.remove("active"));
+    b.classList.add("active");
+    document.getElementById(b.dataset.sec).classList.add("active");
+    document.getElementById("title").textContent=b.textContent.trim();
+    if(b.dataset.sec==="parking") searchParking();
+  };
+});
+
+function table(rows,cols){
+  if(!rows||!rows.length) return '<div class="empty">目前沒有資料。</div>';
+  return `<div class="table-wrap"><table><thead><tr>${cols.map(c=>`<th>${c[0]}</th>`).join("")}</tr></thead><tbody>`+
+    rows.map(r=>`<tr>${cols.map(c=>`<td>${esc(typeof c[1]==="function"?c[1](r):r[c[1]])}</td>`).join("")}</tr>`).join("")+
+    `</tbody></table></div>`;
+}
+
+async function loadAll(){
+  const res=await fetch('/api/summary');
+  summary=await res.json();
+  render();
+}
+
+function render(){
+  document.getElementById("s-repairs").textContent=summary.repairs||0;
+  document.getElementById("s-leave").textContent=summary.leave||0;
+  document.getElementById("s-duty").textContent=summary.duty||0;
+  document.getElementById("s-incidents").textContent=summary.incidents||0;
+  document.getElementById("summary").innerHTML=
+    `<p>🚗 車位資料：${summary.parkingTotal||0} 筆</p>
+     <p>📋 交接：${summary.handovers||0} 筆</p>
+     <p>LINE 回報後請按「重新整理」。</p>`;
+
+  const L=summary.latest||{};
+  document.getElementById("t-repairs").innerHTML=table(L.repairs||[],[
+    ["時間","time"],["回報人","name"],["位置",x=>x.parsed?.location||""],["類別",x=>x.parsed?.category||""],["內容","content"],["狀態","status"]
+  ]);
+  document.getElementById("t-leave").innerHTML=table(L.leave||[],[
+    ["時間","time"],["人員","name"],["內容","content"]
+  ]);
+  document.getElementById("t-duty").innerHTML=table(L.duty||[],[
+    ["時間","time"],["人員","name"],["內容","content"]
+  ]);
+  document.getElementById("t-incidents").innerHTML=table(L.incidents||[],[
+    ["時間","time"],["回報人","name"],["地點",x=>x.parsed?.location||""],["事件",x=>x.parsed?.issue||x.content]
+  ]);
+  document.getElementById("t-handover").innerHTML=table(L.handovers||[],[
+    ["時間","time"],["回報人","name"],["班別",x=>x.parsed?.shift||""],["內容","content"]
+  ]);
+}
+
+async function searchParking(){
+  const q=document.getElementById("q-parking").value;
+  const res=await fetch('/api/parking?q='+encodeURIComponent(q));
+  const rows=await res.json();
+  document.getElementById("t-parking").innerHTML=table(rows,[
+    ["戶別","unit"],["門牌","door"],["樓層","floor"],["所有權人","owner"],["汽車位","car"],["機車位","moto"]
+  ]);
+}
+
+loadAll();
+</script>
+</body>
+</html>

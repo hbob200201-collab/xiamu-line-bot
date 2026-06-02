@@ -21,7 +21,7 @@ const records = {
   parkingQueries: []
 };
 
-// 重要：LINE webhook 必須放在 express.json() 前面，避免 500 驗證錯誤
+// LINE webhook must be before express.json()
 app.post("/webhook", line.middleware(config), async (req, res) => {
   try {
     await Promise.all(req.body.events.map(handleEvent));
@@ -32,7 +32,6 @@ app.post("/webhook", line.middleware(config), async (req, res) => {
   }
 });
 
-// 後台與 API 才使用 JSON
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
@@ -40,9 +39,7 @@ app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
-app.get("/health", (req, res) => {
-  res.status(200).send("OK");
-});
+app.get("/health", (req, res) => res.status(200).send("OK"));
 
 app.get("/api/summary", (req, res) => {
   res.json({
@@ -54,19 +51,19 @@ app.get("/api/summary", (req, res) => {
     parkingQueries: records.parkingQueries.length,
     parkingTotal: parkingData.length,
     latest: {
-      repairs: records.repairs.slice(0, 20),
-      leave: records.leave.slice(0, 20),
-      duty: records.duty.slice(0, 20),
-      incidents: records.incidents.slice(0, 20),
-      handovers: records.handovers.slice(0, 20),
-      parkingQueries: records.parkingQueries.slice(0, 20)
+      repairs: records.repairs.slice(0, 50),
+      leave: records.leave.slice(0, 50),
+      duty: records.duty.slice(0, 50),
+      incidents: records.incidents.slice(0, 50),
+      handovers: records.handovers.slice(0, 50),
+      parkingQueries: records.parkingQueries.slice(0, 50)
     }
   });
 });
 
 app.get("/api/parking", (req, res) => {
   const q = String(req.query.q || "").trim();
-  if (!q) return res.json(parkingData.slice(0, 300));
+  if (!q) return res.json(parkingData.slice(0, 500));
   res.json(searchParking(q));
 });
 
@@ -80,7 +77,6 @@ async function handleEvent(event) {
   const name = await getDisplayName(userId);
 
   if (key === "我的id") return reply(event.replyToken, `你的 LINE User ID：\n${userId}`);
-
   if (key === "報修") return reply(event.replyToken, helpRepair());
   if (key === "休息離哨" || key === "離哨") return reply(event.replyToken, directLeave(name, now));
   if (key === "上哨") return reply(event.replyToken, directDuty(name, now));
@@ -125,33 +121,26 @@ function smartRouter(text, key, name, now) {
     records.parkingQueries.unshift({ time: now, name, keyword });
     return parkingSearchReply(keyword);
   }
-
   if (carSpace && text.trim().toUpperCase().replace(/\s+/g,"") === carSpace) {
     records.parkingQueries.unshift({ time: now, name, keyword: carSpace });
     return parkingSearchReply(carSpace);
   }
-
   if (motoSpace && text.trim().replace(/\s+/g,"") === motoSpace) {
     records.parkingQueries.unshift({ time: now, name, keyword: motoSpace });
     return parkingSearchReply(motoSpace);
   }
-
   if (pureNumber) {
     records.parkingQueries.unshift({ time: now, name, keyword: text.trim() });
     return parkingSearchReply(text.trim());
   }
-
   if (unit && looksLikeRepair(text)) return createRepair(text, name, now);
-
   if (unit && text.trim().toUpperCase().replace(/\s+/g,"").replace(/F$/,"") === unit) {
     records.parkingQueries.unshift({ time: now, name, keyword: unit });
     return parkingSearchReply(unit);
   }
-
   if (looksLikeRepair(text)) return createRepair(text, name, now);
   if (looksLikeIncident(text)) return createIncident(text, name, now);
   if (looksLikeHandover(text)) return createHandover(text, name, now);
-
   return null;
 }
 
@@ -161,21 +150,18 @@ function detectUnit(text) {
   if (!m) return "";
   return m[0].replace("－", "-").replace(/F$/, "");
 }
-
 function detectCarSpace(text) {
   const t = text.toUpperCase().replace(/\s+/g, "");
   const m = t.match(/\bB[1-5][-－]\d{3}\b/);
   if (!m) return "";
   return m[0].replace("－", "-");
 }
-
 function detectMotorcycleSpace(text) {
   const t = text.replace(/\s+/g, "");
   const m = t.match(/^\d{2,4}([-－]\d{2,4})?$/);
   if (!m) return "";
   return m[0].replace("－", "-");
 }
-
 function parseLocation(text) {
   const unit = detectUnit(text);
   if (unit) return unit;
@@ -192,7 +178,6 @@ function parseLocation(text) {
   }
   return "";
 }
-
 function looksLikeRepair(text) {
   return /(報修|故障|壞|破|漏水|滲水|堵塞|不亮|燈|電|跳電|水|門|鎖|對講機|電梯|消防|排水|馬桶|異音|設備|維修|修繕|空調|冷氣|發霉|天花板|牆面|地板)/.test(text);
 }
@@ -202,7 +187,6 @@ function looksLikeIncident(text) {
 function looksLikeHandover(text) {
   return /(交接|待辦|追蹤|未完成|今日重點|提醒|明日|晚班|早班|中班|夜班|續辦|需注意)/.test(text);
 }
-
 function createRepair(text, name, now) {
   const parsed = parseRepair(text);
   const id = `R-${dateId()}-${String(records.repairs.length + 1).padStart(3, "0")}`;
@@ -239,7 +223,6 @@ function createHandover(text, name, now) {
 班別：${parsed.shift || "未判讀"}
 內容：${parsed.content}`;
 }
-
 function parseRepair(text) {
   const location = parseLocation(text);
   let category = "一般報修";
@@ -263,7 +246,6 @@ function parseHandover(text) {
   const content = text.replace(/^交接回報[:：]?\s*/, "").replace(/^交接[:：]?\s*/, "").trim();
   return { shift, content };
 }
-
 function directLeave(name, now) {
   records.leave.unshift({ time: now, name, content: "圖文選單直接登記休息離哨" });
   return `☕ 休息離哨已登記
@@ -282,7 +264,6 @@ function directDuty(name, now) {
 時間：${now}
 狀態：已返回崗位`;
 }
-
 function helpRepair(){return `🔧【智能報修】
 
 直接輸入戶別/樓層/位置 + 問題：
@@ -339,7 +320,7 @@ function searchParking(keyword) {
       String(x.moto).includes(k) ||
       motoParts.includes(k)
     );
-  }).slice(0, 10);
+  }).slice(0, 50);
 }
 function parkingSearchReply(keyword) {
   const found = searchParking(keyword);
@@ -365,23 +346,14 @@ function expandMotoRange(moto) {
   return arr;
 }
 async function getDisplayName(userId) {
-  try {
-    const profile = await client.getProfile(userId);
-    return profile.displayName || userId;
-  } catch (e) {
-    return userId || "未知人員";
-  }
+  try { const profile = await client.getProfile(userId); return profile.displayName || userId; }
+  catch (e) { return userId || "未知人員"; }
 }
-function reply(replyToken, text) {
-  return client.replyMessage(replyToken, { type: "text", text });
-}
-function timeNow() {
-  return new Date().toLocaleString("zh-TW", { timeZone: "Asia/Taipei" });
-}
+function reply(replyToken, text) { return client.replyMessage(replyToken, { type: "text", text }); }
+function timeNow() { return new Date().toLocaleString("zh-TW", { timeZone: "Asia/Taipei" }); }
 function dateId() {
   const d = new Date();
   return `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,"0")}${String(d.getDate()).padStart(2,"0")}`;
 }
-
 const port = process.env.PORT || 3000;
-app.listen(port, () => console.log(`Xiamu LINE Bot V11 Webhook Fix running on port ${port}`));
+app.listen(port, () => console.log(`Xiamu LINE Bot V12 Admin Layout Fix running on port ${port}`));
