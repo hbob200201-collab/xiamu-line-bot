@@ -19,7 +19,7 @@ const records = {
 };
 
 app.get("/", (req, res) => {
-  res.send("Xiamu Property LINE Bot V4 is running.");
+  res.send("Xiamu Property LINE Bot V5 is running.");
 });
 
 app.post("/webhook", line.middleware(config), async (req, res) => {
@@ -35,60 +35,63 @@ app.post("/webhook", line.middleware(config), async (req, res) => {
 async function handleEvent(event) {
   if (event.type !== "message" || event.message.type !== "text") return;
 
-  const text = event.message.text.trim();
+  const rawText = event.message.text || "";
+  const text = rawText.trim();
+  const key = normalize(text);
   const userId = event.source.userId || "";
   const now = new Date().toLocaleString("zh-TW", { timeZone: "Asia/Taipei" });
   const name = await getDisplayName(userId);
 
-  if (text === "我的ID") {
+  if (key === "我的id") {
     return reply(event.replyToken, `你的 LINE User ID：\n${userId}`);
   }
 
-  // 圖文選單按下後的動作
-  if (text === "報修") return reply(event.replyToken, templateRepair());
-  if (text === "休息離哨") return reply(event.replyToken, directLeave(name, now));
-  if (text === "上哨") return reply(event.replyToken, directDuty(name, now));
-  if (text === "車位查詢") return reply(event.replyToken, templateParking());
-  if (text === "異常事件") return reply(event.replyToken, templateIncident());
-  if (text === "交接回報") return reply(event.replyToken, templateHandover());
+  // 圖文選單：允許 emoji、空格、斜線、全形符號
+  if (key === "報修") return reply(event.replyToken, templateRepair());
+  if (key === "休息離哨" || key === "離哨") return reply(event.replyToken, directLeave(name, now));
+  if (key === "上哨") return reply(event.replyToken, directDuty(name, now));
+  if (key === "車位查詢" || key === "查車位") return reply(event.replyToken, templateParking());
+  if (key === "異常事件" || key === "異常") return reply(event.replyToken, templateIncident());
+  if (key === "交接回報" || key === "交接") return reply(event.replyToken, templateHandover());
+  if (key === "功能" || key === "選單" || key === "menu") return reply(event.replyToken, mainMenu());
 
-  if (["功能", "選單", "menu"].includes(text.toLowerCase())) {
-    return reply(event.replyToken, mainMenu());
-  }
-
-  if (text === "6表" || text === "六表" || text === "今日紀錄") {
-    return reply(event.replyToken, summary());
-  }
-
-  const result = handleRecord(text, name, now);
+  const result = handleRecord(text, key, name, now);
   if (result) return reply(event.replyToken, result);
 
-  return reply(event.replyToken, `格式未判斷成功。\n\n請點選下方圖文選單，或輸入「功能」查看格式。`);
+  return reply(event.replyToken, `格式未判斷成功。
+
+請直接按下方圖文選單，或輸入：
+報修
+休息離哨
+上哨
+車位查詢
+異常事件
+交接回報`);
+}
+
+function normalize(input) {
+  return String(input)
+    .replace(/[🔧🛠☕👮🚗🚨📋✅]/g, "")
+    .replace(/[\/／]/g, "")
+    .replace(/\s+/g, "")
+    .replace(/：/g, ":")
+    .trim()
+    .toLowerCase();
 }
 
 function directLeave(name, now) {
-  records.leave.push({
-    time: now,
-    name,
-    content: "圖文選單直接登記休息離哨"
-  });
-
+  records.leave.push({ time: now, name, content: "圖文選單直接登記休息離哨" });
   return `☕ 休息離哨已登記
 
 人員：${name}
 時間：${now}
 狀態：離哨中
 
-返回時請按「上哨」登記返回。`;
+返回時請按「上哨」。`;
 }
 
 function directDuty(name, now) {
-  records.duty.push({
-    time: now,
-    name,
-    content: "圖文選單直接登記上哨"
-  });
-
+  records.duty.push({ time: now, name, content: "圖文選單直接登記上哨" });
   return `👮 上哨已登記
 
 人員：${name}
@@ -96,36 +99,46 @@ function directDuty(name, now) {
 狀態：已返回崗位`;
 }
 
-function handleRecord(text, name, now) {
+function handleRecord(text, key, name, now) {
   if (text.startsWith("報修內容")) {
     const id = `R-${dateId()}-${String(records.repairs.length + 1).padStart(3, "0")}`;
     records.repairs.push({ id, time: now, name, content: text });
-    return `✅ 報修已建立\n案件編號：${id}\n回報人：${name}\n時間：${now}\n\n${text}`;
-  }
+    return `✅ 報修已建立
+案件編號：${id}
+回報人：${name}
+時間：${now}
 
-  if (text.startsWith("休息離哨內容")) {
-    records.leave.push({ time: now, name, content: text });
-    return `✅ 休息離哨已登錄\n人員：${name}\n時間：${now}\n\n${text}`;
-  }
-
-  if (text.startsWith("上哨內容")) {
-    records.duty.push({ time: now, name, content: text });
-    return `✅ 上哨已登錄\n人員：${name}\n時間：${now}\n\n${text}`;
+${text}`;
   }
 
   if (text.startsWith("異常事件內容")) {
     const id = `E-${dateId()}-${String(records.incidents.length + 1).padStart(3, "0")}`;
     records.incidents.push({ id, time: now, name, content: text });
-    return `🚨 異常事件已登錄\n事件編號：${id}\n回報人：${name}\n時間：${now}\n\n${text}`;
+    return `🚨 異常事件已登錄
+事件編號：${id}
+回報人：${name}
+時間：${now}
+
+${text}`;
   }
 
   if (text.startsWith("交接回報內容")) {
     records.handovers.push({ time: now, name, content: text });
-    return `📋 交接回報已登錄\n回報人：${name}\n時間：${now}\n\n${text}`;
+    return `📋 交接回報已登錄
+回報人：${name}
+時間：${now}
+
+${text}`;
   }
 
-  if (text.startsWith("車位查詢內容")) {
-    const keyword = text.replace("車位查詢內容", "").replace("：", "").trim();
+  if (key.startsWith("車位查詢內容")) {
+    const keyword = text.replace(/^車位查詢內容[:：]?/, "").trim();
+    records.parkingQueries.push({ time: now, name, keyword });
+    return parkingSearch(keyword);
+  }
+
+  if (key.startsWith("車位查詢")) {
+    const keyword = text.replace(/^車位查詢\s*/, "").trim();
     records.parkingQueries.push({ time: now, name, keyword });
     return parkingSearch(keyword);
   }
@@ -134,38 +147,31 @@ function handleRecord(text, name, now) {
     const content = text.replace(/^報修\s*/, "");
     const id = `R-${dateId()}-${String(records.repairs.length + 1).padStart(3, "0")}`;
     records.repairs.push({ id, time: now, name, content });
-    return `✅ 報修已建立\n案件編號：${id}\n回報人：${name}\n時間：${now}\n內容：${content}`;
+    return `✅ 報修已建立
+案件編號：${id}
+回報人：${name}
+時間：${now}
+內容：${content}`;
   }
 
   if (text.startsWith("異常事件 ")) {
     const content = text.replace(/^異常事件\s*/, "");
     const id = `E-${dateId()}-${String(records.incidents.length + 1).padStart(3, "0")}`;
     records.incidents.push({ id, time: now, name, content });
-    return `🚨 異常事件已登錄\n事件編號：${id}\n回報人：${name}\n時間：${now}\n內容：${content}`;
-  }
-
-  if (text.startsWith("車位查詢 ")) {
-    const keyword = text.replace(/^車位查詢\s*/, "");
-    records.parkingQueries.push({ time: now, name, keyword });
-    return parkingSearch(keyword);
-  }
-
-  if (text.startsWith("上哨 ")) {
-    const content = text.replace(/^上哨\s*/, "");
-    records.duty.push({ time: now, name, content });
-    return `✅ 上哨已登錄\n人員：${name}\n時間：${now}\n內容：${content}`;
-  }
-
-  if (text.startsWith("休息離哨 ")) {
-    const content = text.replace(/^休息離哨\s*/, "");
-    records.leave.push({ time: now, name, content });
-    return `✅ 休息離哨已登錄\n人員：${name}\n時間：${now}\n內容：${content}`;
+    return `🚨 異常事件已登錄
+事件編號：${id}
+回報人：${name}
+時間：${now}
+內容：${content}`;
   }
 
   if (text.startsWith("交接回報 ")) {
     const content = text.replace(/^交接回報\s*/, "");
     records.handovers.push({ time: now, name, content });
-    return `📋 交接回報已登錄\n回報人：${name}\n時間：${now}\n內容：${content}`;
+    return `📋 交接回報已登錄
+回報人：${name}
+時間：${now}
+內容：${content}`;
   }
 
   return null;
@@ -191,10 +197,9 @@ function templateParking() {
 
 請輸入：
 
-車位查詢內容：B2-124
+車位查詢 B2-124
 
 也可以輸入：
-車位查詢 B2-124
 車位查詢 A3-22
 車位查詢 267`;
 }
@@ -232,22 +237,18 @@ function templateHandover() {
 function mainMenu() {
   return `夏沐物業LINE系統
 
-點選圖文選單即可使用：
+請點選圖文選單：
 
-報修：回覆填寫格式
-休息離哨：直接登記
-上哨：直接登記
-車位查詢：回覆查詢格式
-異常事件：回覆填寫格式
-交接回報：回覆填寫格式
-
-查統計：6表`;
+報修
+休息離哨
+上哨
+車位查詢
+異常事件
+交接回報`;
 }
 
 function parkingSearch(keyword) {
-  if (!keyword) {
-    return `請輸入查詢內容，例如：\n車位查詢 B2-124`;
-  }
+  if (!keyword) return `請輸入查詢內容，例如：\n車位查詢 B2-124`;
 
   const data = [
     { unit: "A1-22", door: "261", owner: "羅月青", car: "B3-050", moto: "245-246" },
@@ -267,19 +268,13 @@ function parkingSearch(keyword) {
   if (!found.length) return `查無車位資料：${keyword}`;
 
   return found.map(x =>
-    `🚗【車位查詢結果】\n戶別：${x.unit}\n門牌：${x.door}\n所有權人：${x.owner}\n汽車位：${x.car}\n機車位：${x.moto}`
+    `🚗【車位查詢結果】
+戶別：${x.unit}
+門牌：${x.door}
+所有權人：${x.owner}
+汽車位：${x.car}
+機車位：${x.moto}`
   ).join("\n\n");
-}
-
-function summary() {
-  return `📊【今日6表紀錄】
-
-1. 報修：${records.repairs.length} 筆
-2. 休息離哨：${records.leave.length} 筆
-3. 上哨：${records.duty.length} 筆
-4. 車位查詢：${records.parkingQueries.length} 筆
-5. 異常事件：${records.incidents.length} 筆
-6. 交接回報：${records.handovers.length} 筆`;
 }
 
 async function getDisplayName(userId) {
@@ -302,5 +297,5 @@ function dateId() {
 
 const port = process.env.PORT || 3000;
 app.listen(port, () => {
-  console.log(`Xiamu LINE Bot V4 running on port ${port}`);
+  console.log(`Xiamu LINE Bot V5 running on port ${port}`);
 });

@@ -1,7 +1,7 @@
 {
-  "name": "xiamu-line-bot-v4-direct-duty",
-  "version": "4.0.0",
-  "description": "遠雄夏沐物業 LINE Bot V4 離哨上哨直接登記版",
+  "name": "xiamu-line-bot-v5-robust-menu",
+  "version": "5.0.0",
+  "description": "遠雄夏沐物業 LINE Bot V5 強化圖文選單判斷版",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
