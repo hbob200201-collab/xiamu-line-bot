@@ -1,7 +1,7 @@
 {
-  "name": "xiamu-line-bot-v8-motorcycle-fix",
-  "version": "8.0.0",
-  "description": "遠雄夏沐物業 LINE Bot V8 機車位判斷修正版",
+  "name": "xiamu-line-bot-v9-official-parking-data",
+  "version": "9.0.0",
+  "description": "遠雄夏沐物業 LINE Bot V9 正式車位資料匯入版",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
