@@ -1,7 +1,7 @@
 {
-  "name": "xiamu-line-bot-v6-smart-parse",
-  "version": "6.0.0",
-  "description": "遠雄夏沐物業 LINE Bot V6 智能判讀版",
+  "name": "xiamu-line-bot-v8-motorcycle-fix",
+  "version": "8.0.0",
+  "description": "遠雄夏沐物業 LINE Bot V8 機車位判斷修正版",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"

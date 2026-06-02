@@ -18,9 +18,15 @@ const records = {
   parkingQueries: []
 };
 
-app.get("/", (req, res) => {
-  res.send("Xiamu Property LINE Bot V6 Smart Parse is running.");
-});
+// 範例資料：正式版請把完整 Excel 資料轉成這個格式
+const parkingData = [
+  { unit: "A1-22", door: "261", owner: "羅月青", car: "B3-050", moto: "245-246" },
+  { unit: "A2-22", door: "263", owner: "蔡玉惠美", car: "B2-124", moto: "215-216" },
+  { unit: "A3-22", door: "267", owner: "翁紹銘", car: "B3-041", moto: "155-156" },
+  { unit: "A5-22", door: "265", owner: "陳泳沛", car: "B3-042", moto: "143-144" }
+];
+
+app.get("/", (req, res) => res.send("Xiamu Property LINE Bot V8 Motorcycle Fix is running."));
 
 app.post("/webhook", line.middleware(config), async (req, res) => {
   try {
@@ -35,39 +41,35 @@ app.post("/webhook", line.middleware(config), async (req, res) => {
 async function handleEvent(event) {
   if (event.type !== "message" || event.message.type !== "text") return;
 
-  const rawText = event.message.text || "";
-  const text = rawText.trim();
+  const text = (event.message.text || "").trim();
   const key = normalize(text);
   const userId = event.source.userId || "";
   const now = new Date().toLocaleString("zh-TW", { timeZone: "Asia/Taipei" });
   const name = await getDisplayName(userId);
 
-  if (key === "我的id") {
-    return reply(event.replyToken, `你的 LINE User ID：\n${userId}`);
-  }
+  if (key === "我的id") return reply(event.replyToken, `你的 LINE User ID：\n${userId}`);
 
-  // 圖文選單
-  if (key === "報修") return reply(event.replyToken, smartRepairHelp());
+  if (key === "報修") return reply(event.replyToken, helpRepair());
   if (key === "休息離哨" || key === "離哨") return reply(event.replyToken, directLeave(name, now));
   if (key === "上哨") return reply(event.replyToken, directDuty(name, now));
-  if (key === "車位查詢" || key === "查車位") return reply(event.replyToken, smartParkingHelp());
-  if (key === "異常事件" || key === "異常") return reply(event.replyToken, smartIncidentHelp());
-  if (key === "交接回報" || key === "交接") return reply(event.replyToken, smartHandoverHelp());
+  if (key === "車位查詢" || key === "查車位") return reply(event.replyToken, helpParking());
+  if (key === "異常事件" || key === "異常") return reply(event.replyToken, helpIncident());
+  if (key === "交接回報" || key === "交接") return reply(event.replyToken, helpHandover());
   if (key === "功能" || key === "選單" || key === "menu") return reply(event.replyToken, mainMenu());
 
-  // 智能判讀
-  const smart = smartRouter(text, key, name, now);
-  if (smart) return reply(event.replyToken, smart);
+  const result = smartRouter(text, key, name, now);
+  if (result) return reply(event.replyToken, result);
 
-  return reply(event.replyToken, `我無法判斷這筆內容。
+  return reply(event.replyToken, `格式未判斷成功。
 
-你可以直接輸入：
-A棟3樓燈不亮
-B1車道住戶糾紛
-B2-124
-124
+可輸入：
 A3-22
-交接 今日B1臨停需追蹤`);
+B2-124
+215
+215-216
+機車位215
+A3-22 漏水
+B1車道住戶糾紛`);
 }
 
 function normalize(input) {
@@ -81,107 +83,90 @@ function normalize(input) {
 }
 
 function smartRouter(text, key, name, now) {
-  // 1. 車位查詢優先：車位格式、戶別、門牌純數字
-  const parkingKeyword = detectParkingKeyword(text);
-  if (parkingKeyword && !looksLikeRepair(text) && !looksLikeIncident(text) && !looksLikeHandover(text)) {
-    records.parkingQueries.push({ time: now, name, keyword: parkingKeyword });
-    return parkingSearch(parkingKeyword);
-  }
+  const explicitParking = /^(車位查詢|查車位|汽車位|機車位|車位)/.test(text);
+  const unit = detectUnit(text);
+  const carSpace = detectCarSpace(text);
+  const motoSpace = detectMotorcycleSpace(text);
+  const pureNumber = /^\d{2,4}$/.test(text.trim());
 
-  // 2. 明確車位查詢
-  if (key.startsWith("車位查詢") || key.startsWith("查車位")) {
-    const keyword = text.replace(/車位查詢|查車位|：|:/g, "").trim();
+  // 明確查詢：車位/機車位/汽車位
+  if (explicitParking) {
+    const keyword = text.replace(/車位查詢|查車位|汽車位|機車位|車位|：|:/g, "").trim();
     records.parkingQueries.push({ time: now, name, keyword });
     return parkingSearch(keyword);
   }
 
-  // 3. 交接
-  if (looksLikeHandover(text)) {
-    const parsed = parseHandover(text);
-    records.handovers.push({ time: now, name, content: text, parsed });
-    return `📋 交接回報已登錄
-
-回報人：${name}
-時間：${now}
-班別：${parsed.shift || "未判讀"}
-內容：${parsed.content}
-
-系統判斷：交接事項`;
+  // B2-124 這種三碼汽車位
+  if (carSpace && text.trim().toUpperCase().replace(/\s+/g,"") === carSpace) {
+    records.parkingQueries.push({ time: now, name, keyword: carSpace });
+    return parkingSearch(carSpace);
   }
 
-  // 4. 異常事件
-  if (looksLikeIncident(text)) {
-    const parsed = parseIncident(text);
-    const id = `E-${dateId()}-${String(records.incidents.length + 1).padStart(3, "0")}`;
-    records.incidents.push({ id, time: now, name, content: text, parsed });
-    return `🚨 異常事件已登錄
-
-事件編號：${id}
-回報人：${name}
-時間：${now}
-地點：${parsed.location || "未判讀"}
-事件：${parsed.issue || text}
-
-系統判斷：異常事件`;
+  // 215 或 215-216 這種機車位
+  if (motoSpace && text.trim().replace(/\s+/g,"") === motoSpace) {
+    records.parkingQueries.push({ time: now, name, keyword: motoSpace });
+    return parkingSearch(motoSpace);
   }
 
-  // 5. 報修
-  if (looksLikeRepair(text)) {
-    const parsed = parseRepair(text);
-    const id = `R-${dateId()}-${String(records.repairs.length + 1).padStart(3, "0")}`;
-    records.repairs.push({ id, time: now, name, content: text, parsed });
-    return `🔧 報修已建立
-
-案件編號：${id}
-回報人：${name}
-時間：${now}
-位置：${parsed.location || "未判讀"}
-類別：${parsed.category || "一般報修"}
-說明：${parsed.issue || text}
-
-系統已自動判讀為：報修案件`;
+  // 純數字：先查機車位，再查門牌
+  if (pureNumber) {
+    records.parkingQueries.push({ time: now, name, keyword: text.trim() });
+    return parkingSearch(text.trim());
   }
 
-  // 6. 傳統格式仍支援
-  if (text.startsWith("報修內容")) {
-    const id = `R-${dateId()}-${String(records.repairs.length + 1).padStart(3, "0")}`;
-    records.repairs.push({ id, time: now, name, content: text });
-    return `✅ 報修已建立\n案件編號：${id}\n回報人：${name}\n時間：${now}\n\n${text}`;
+  // 戶別 + 問題 = 報修
+  if (unit && looksLikeRepair(text)) return createRepair(text, name, now);
+
+  // 只有戶別 = 查戶別資料
+  if (unit && text.trim().toUpperCase().replace(/\s+/g,"").replace(/F$/,"") === unit) {
+    records.parkingQueries.push({ time: now, name, keyword: unit });
+    return parkingSearch(unit);
   }
-  if (text.startsWith("異常事件內容")) {
-    const id = `E-${dateId()}-${String(records.incidents.length + 1).padStart(3, "0")}`;
-    records.incidents.push({ id, time: now, name, content: text });
-    return `🚨 異常事件已登錄\n事件編號：${id}\n回報人：${name}\n時間：${now}\n\n${text}`;
-  }
-  if (text.startsWith("交接回報內容")) {
-    records.handovers.push({ time: now, name, content: text });
-    return `📋 交接回報已登錄\n回報人：${name}\n時間：${now}\n\n${text}`;
-  }
+
+  if (looksLikeRepair(text)) return createRepair(text, name, now);
+  if (looksLikeIncident(text)) return createIncident(text, name, now);
+  if (looksLikeHandover(text)) return createHandover(text, name, now);
 
   return null;
 }
 
-function detectParkingKeyword(text) {
-  const t = text.trim().toUpperCase();
+function detectUnit(text) {
+  const t = text.toUpperCase().replace(/\s+/g, "");
+  const m = t.match(/\b[AB][1-9][-－]\d{1,2}F?\b/);
+  if (!m) return "";
+  return m[0].replace("－", "-").replace(/F$/, "");
+}
 
-  // 汽車位：B2-124、B3 041、B1-22
-  let m = t.match(/\bB[1-5]\s*[-－]?\s*\d{1,3}\b/);
-  if (m) return m[0].replace(/\s+/g, "").replace("－", "-");
+function detectCarSpace(text) {
+  const t = text.toUpperCase().replace(/\s+/g, "");
+  const m = t.match(/\bB[1-5][-－]\d{3}\b/);
+  if (!m) return "";
+  return m[0].replace("－", "-");
+}
 
-  // 戶別：A3-22、A3-22F、B5-10
-  m = t.match(/\b[AB]\d\s*[-－]?\s*\d{1,2}F?\b/i);
-  if (m) return m[0].toUpperCase().replace(/\s+/g, "").replace("－", "-").replace(/F$/, "");
+function detectMotorcycleSpace(text) {
+  const t = text.replace(/\s+/g, "");
+  // 機車位：單號或連號，例如 215、215-216
+  const m = t.match(/^\d{2,4}([-－]\d{2,4})?$/);
+  if (!m) return "";
+  return m[0].replace("－", "-");
+}
 
-  // 門牌或機車位：純數字 2~4 位，例如 267、124、215
-  m = t.match(/^\d{2,4}$/);
-  if (m) return m[0];
+function parseLocation(text) {
+  const unit = detectUnit(text);
+  if (unit) return unit;
 
-  // 明確講車位、機車位、門牌、戶別時，抓後面的代碼
-  if (/車位|機車位|汽車位|門牌|戶別/.test(text)) {
-    m = t.match(/[AB]\d\s*[-－]?\s*\d{1,2}F?|B[1-5]\s*[-－]?\s*\d{1,3}|\d{2,4}/i);
-    if (m) return m[0].toUpperCase().replace(/\s+/g, "").replace("－", "-").replace(/F$/, "");
+  const patterns = [
+    /[AB]棟?\s*\d{1,2}樓?/i,
+    /B[1-5]F?/i,
+    /地下[一二三四五12345]樓/,
+    /[一二三四五六七八九十\d]+樓/,
+    /大廳|櫃台|車道|停車場|梯廳|中庭|公設|健身房|Lounge|垃圾間|機房|屋頂|RF|電梯|信箱區|管理室/
+  ];
+  for (const p of patterns) {
+    const m = text.match(p);
+    if (m) return m[0].replace(/\s+/g, "");
   }
-
   return "";
 }
 
@@ -197,20 +182,42 @@ function looksLikeHandover(text) {
   return /(交接|待辦|追蹤|未完成|今日重點|提醒|明日|晚班|早班|中班|夜班|續辦|需注意)/.test(text);
 }
 
-function parseLocation(text) {
-  const patterns = [
-    /[AB]棟?\s*\d{1,2}樓?/i,
-    /[AB]\d\s*[-－]?\s*\d{1,2}F?/i,
-    /B[1-5]F?/i,
-    /地下[一二三四五12345]樓/,
-    /[一二三四五六七八九十\d]+樓/,
-    /大廳|櫃台|車道|停車場|梯廳|中庭|公設|健身房|Lounge|垃圾間|機房|屋頂|RF|電梯|信箱區|管理室/
-  ];
-  for (const p of patterns) {
-    const m = text.match(p);
-    if (m) return m[0].replace(/\s+/g, "");
-  }
-  return "";
+function createRepair(text, name, now) {
+  const parsed = parseRepair(text);
+  const id = `R-${dateId()}-${String(records.repairs.length + 1).padStart(3, "0")}`;
+  records.repairs.push({ id, time: now, name, content: text, parsed });
+  return `🔧 報修已建立
+
+案件編號：${id}
+回報人：${name}
+時間：${now}
+戶別/位置：${parsed.location || "未判讀"}
+類別：${parsed.category}
+說明：${parsed.issue || text}`;
+}
+
+function createIncident(text, name, now) {
+  const parsed = parseIncident(text);
+  const id = `E-${dateId()}-${String(records.incidents.length + 1).padStart(3, "0")}`;
+  records.incidents.push({ id, time: now, name, content: text, parsed });
+  return `🚨 異常事件已登錄
+
+事件編號：${id}
+回報人：${name}
+時間：${now}
+地點：${parsed.location || "未判讀"}
+事件：${parsed.issue || text}`;
+}
+
+function createHandover(text, name, now) {
+  const parsed = parseHandover(text);
+  records.handovers.push({ time: now, name, content: text, parsed });
+  return `📋 交接回報已登錄
+
+回報人：${name}
+時間：${now}
+班別：${parsed.shift || "未判讀"}
+內容：${parsed.content}`;
 }
 
 function parseRepair(text) {
@@ -218,7 +225,7 @@ function parseRepair(text) {
   let category = "一般報修";
   if (/漏水|滲水|水|排水|馬桶|堵塞/.test(text)) category = "給排水";
   else if (/燈|電|跳電|插座|不亮/.test(text)) category = "水電";
-  else if (/電梯|OTIS/.test(text)) category = "電梯";
+  else if (/電梯|OTIS/i.test(text)) category = "電梯";
   else if (/消防|火警|警報|防火/.test(text)) category = "消防";
   else if (/門禁|對講機|監視器|弱電/.test(text)) category = "弱電門禁";
   else if (/冷氣|空調/.test(text)) category = "空調";
@@ -233,10 +240,9 @@ function parseIncident(text) {
 }
 
 function parseHandover(text) {
-  let shift = "";
   const m = text.match(/早班|中班|晚班|夜班/);
-  if (m) shift = m[0];
-  const content = text.replace(/^交接回報[:：]?\s*/, "").trim();
+  const shift = m ? m[0] : "";
+  const content = text.replace(/^交接回報[:：]?\s*/, "").replace(/^交接[:：]?\s*/, "").trim();
   return { shift, content };
 }
 
@@ -260,89 +266,79 @@ function directDuty(name, now) {
 狀態：已返回崗位`;
 }
 
-function smartRepairHelp() {
+function helpRepair() {
   return `🔧【智能報修】
 
-不用固定格式，直接輸入即可：
+直接輸入戶別/樓層/位置 + 問題：
 
-例：
+A3-18 漏水
 A棟3樓燈不亮
 B1車道排水堵塞
-A3-18 漏水
-電梯有異音
-
-系統會自動判讀樓層、位置與報修類別。`;
+電梯有異音`;
 }
 
-function smartParkingHelp() {
+function helpParking() {
   return `🚗【智能車位查詢】
 
-直接輸入即可：
+可輸入：
 
-B2-124
-124
 A3-22
-267
+B2-124
 215
+215-216
+機車位215
+車位查詢 267
 
-可用汽車位、機車位、戶別、門牌查詢。`;
+可查：戶別、門牌、汽車位、機車位。`;
 }
 
-function smartIncidentHelp() {
-  return `🚨【智能異常事件】
+function helpIncident() {
+  return `🚨【異常事件】
 
-直接輸入即可：
-
+直接輸入：
 B1車道住戶臨停爭議
 大廳住戶吵架
-消防警報誤報
-地下室可疑人員`;
+消防警報誤報`;
 }
 
-function smartHandoverHelp() {
+function helpHandover() {
   return `📋【交接回報】
 
-直接輸入即可：
-
+直接輸入：
 交接 早班 B1臨停需追蹤
-夜班 電梯異音明日通知廠商
-今日待辦 垃圾間異味需複查`;
+夜班 電梯異音明日通知廠商`;
 }
 
 function mainMenu() {
   return `夏沐物業LINE系統
 
-智能判讀已啟用：
-
-報修：直接打位置+問題
-車位：直接打號碼或戶別
+報修：戶別/樓層 + 問題
+車位查詢：戶別/門牌/汽車位/機車位
 離哨：按休息離哨
 上哨：按上哨
-異常：直接打事件內容
-交接：直接打交接事項`;
+異常：輸入事件內容
+交接：輸入交接事項`;
 }
 
 function parkingSearch(keyword) {
-  if (!keyword) return `請輸入查詢內容，例如：B2-124、124、A3-22、267`;
+  if (!keyword) return `請輸入查詢內容，例如：A3-22、B2-124、215、215-216`;
 
   const k = keyword.toUpperCase().replace(/\s+/g, "").replace("－","-").replace(/F$/,"");
 
-  const data = [
-    { unit: "A1-22", door: "261", owner: "羅月青", car: "B3-050", moto: "245-246" },
-    { unit: "A2-22", door: "263", owner: "蔡玉惠美", car: "B2-124", moto: "215-216" },
-    { unit: "A3-22", door: "267", owner: "翁紹銘", car: "B3-041", moto: "155-156" },
-    { unit: "A5-22", door: "265", owner: "陳泳沛", car: "B3-042", moto: "143-144" }
-  ];
-
-  const found = data.filter(x =>
-    x.unit.toUpperCase().includes(k) ||
-    x.door.includes(k) ||
-    x.owner.includes(keyword) ||
-    x.car.toUpperCase().replace(/^B(\d)-(\d{1,2})$/, "B$1-0$2").includes(k) ||
-    x.car.toUpperCase().includes(k) ||
-    x.moto.includes(k) ||
-    x.moto.split("-").includes(k)
-  );
+  const found = parkingData.filter(x => {
+    const motoParts = expandMotoRange(x.moto);
+    return (
+      x.unit.toUpperCase() === k ||
+      x.unit.toUpperCase().includes(k) ||
+      x.door === k ||
+      x.owner.includes(keyword) ||
+      x.car.toUpperCase() === k ||
+      x.car.toUpperCase().includes(k) ||
+      x.moto === k ||
+      x.moto.includes(k) ||
+      motoParts.includes(k)
+    );
+  });
 
   if (!found.length) return `查無車位資料：${keyword}`;
 
@@ -354,6 +350,18 @@ function parkingSearch(keyword) {
 汽車位：${x.car}
 機車位：${x.moto}`
   ).join("\n\n");
+}
+
+function expandMotoRange(moto) {
+  if (!moto) return [];
+  const s = String(moto).replace("－", "-");
+  if (!s.includes("-")) return [s];
+  const [a, b] = s.split("-").map(x => parseInt(x, 10));
+  if (isNaN(a) || isNaN(b)) return [s];
+  const arr = [];
+  for (let i = Math.min(a,b); i <= Math.max(a,b); i++) arr.push(String(i));
+  arr.push(s);
+  return arr;
 }
 
 async function getDisplayName(userId) {
@@ -375,6 +383,4 @@ function dateId() {
 }
 
 const port = process.env.PORT || 3000;
-app.listen(port, () => {
-  console.log(`Xiamu LINE Bot V6 Smart Parse running on port ${port}`);
-});
+app.listen(port, () => console.log(`Xiamu LINE Bot V8 running on port ${port}`));
