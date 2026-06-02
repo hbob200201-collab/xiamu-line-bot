@@ -1,7 +1,7 @@
 {
-  "name": "xiamu-line-bot-v2-six-forms",
-  "version": "2.0.0",
-  "description": "遠雄夏沐物業 LINE Bot V2 六表版",
+  "name": "xiamu-line-bot-v4-direct-duty",
+  "version": "4.0.0",
+  "description": "遠雄夏沐物業 LINE Bot V4 離哨上哨直接登記版",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"

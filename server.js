@@ -9,7 +9,7 @@ const config = {
 const client = new line.Client(config);
 const app = express();
 
-const memory = {
+const records = {
   repairs: [],
   leave: [],
   duty: [],
@@ -19,7 +19,7 @@ const memory = {
 };
 
 app.get("/", (req, res) => {
-  res.send("Xiamu Property LINE Bot V2 is running.");
+  res.send("Xiamu Property LINE Bot V4 is running.");
 });
 
 app.post("/webhook", line.middleware(config), async (req, res) => {
@@ -44,68 +44,209 @@ async function handleEvent(event) {
     return reply(event.replyToken, `你的 LINE User ID：\n${userId}`);
   }
 
-  if (["功能", "選單", "報修", "休息離哨", "上哨", "異常事件", "交接回報", "車位查詢"].includes(text)) {
-    return reply(event.replyToken, menu());
+  // 圖文選單按下後的動作
+  if (text === "報修") return reply(event.replyToken, templateRepair());
+  if (text === "休息離哨") return reply(event.replyToken, directLeave(name, now));
+  if (text === "上哨") return reply(event.replyToken, directDuty(name, now));
+  if (text === "車位查詢") return reply(event.replyToken, templateParking());
+  if (text === "異常事件") return reply(event.replyToken, templateIncident());
+  if (text === "交接回報") return reply(event.replyToken, templateHandover());
+
+  if (["功能", "選單", "menu"].includes(text.toLowerCase())) {
+    return reply(event.replyToken, mainMenu());
   }
 
-  const result = handleBusinessText(text, name, now);
-
-  if (!result) {
-    return reply(event.replyToken, `請依格式輸入：\n\n${menu()}`);
+  if (text === "6表" || text === "六表" || text === "今日紀錄") {
+    return reply(event.replyToken, summary());
   }
 
-  return reply(event.replyToken, result);
+  const result = handleRecord(text, name, now);
+  if (result) return reply(event.replyToken, result);
+
+  return reply(event.replyToken, `格式未判斷成功。\n\n請點選下方圖文選單，或輸入「功能」查看格式。`);
 }
 
-function handleBusinessText(text, name, now) {
-  if (text.startsWith("報修")) {
-    const content = text.replace(/^報修/, "").trim();
-    const id = `R-${dateId()}-${String(memory.repairs.length + 1).padStart(3, "0")}`;
-    memory.repairs.push({ id, time: now, name, content });
-    return `✅ 報修已登錄\n案件編號：${id}\n回報人：${name}\n時間：${now}\n內容：${content || "未填寫"}`;
+function directLeave(name, now) {
+  records.leave.push({
+    time: now,
+    name,
+    content: "圖文選單直接登記休息離哨"
+  });
+
+  return `☕ 休息離哨已登記
+
+人員：${name}
+時間：${now}
+狀態：離哨中
+
+返回時請按「上哨」登記返回。`;
+}
+
+function directDuty(name, now) {
+  records.duty.push({
+    time: now,
+    name,
+    content: "圖文選單直接登記上哨"
+  });
+
+  return `👮 上哨已登記
+
+人員：${name}
+時間：${now}
+狀態：已返回崗位`;
+}
+
+function handleRecord(text, name, now) {
+  if (text.startsWith("報修內容")) {
+    const id = `R-${dateId()}-${String(records.repairs.length + 1).padStart(3, "0")}`;
+    records.repairs.push({ id, time: now, name, content: text });
+    return `✅ 報修已建立\n案件編號：${id}\n回報人：${name}\n時間：${now}\n\n${text}`;
   }
 
-  if (text.startsWith("休息離哨")) {
-    const content = text.replace(/^休息離哨/, "").trim();
-    memory.leave.push({ time: now, name, content });
-    return `✅ 休息離哨已登錄\n人員：${name}\n時間：${now}\n說明：${content || "未填寫"}`;
+  if (text.startsWith("休息離哨內容")) {
+    records.leave.push({ time: now, name, content: text });
+    return `✅ 休息離哨已登錄\n人員：${name}\n時間：${now}\n\n${text}`;
   }
 
-  if (text.startsWith("上哨")) {
-    const content = text.replace(/^上哨/, "").trim();
-    memory.duty.push({ time: now, name, content });
-    return `✅ 上哨已登錄\n人員：${name}\n時間：${now}\n說明：${content || "未填寫"}`;
+  if (text.startsWith("上哨內容")) {
+    records.duty.push({ time: now, name, content: text });
+    return `✅ 上哨已登錄\n人員：${name}\n時間：${now}\n\n${text}`;
   }
 
-  if (text.startsWith("異常事件")) {
-    const content = text.replace(/^異常事件/, "").trim();
-    const id = `E-${dateId()}-${String(memory.incidents.length + 1).padStart(3, "0")}`;
-    memory.incidents.push({ id, time: now, name, content });
-    return `🚨 異常事件已登錄\n事件編號：${id}\n回報人：${name}\n時間：${now}\n內容：${content || "未填寫"}`;
+  if (text.startsWith("異常事件內容")) {
+    const id = `E-${dateId()}-${String(records.incidents.length + 1).padStart(3, "0")}`;
+    records.incidents.push({ id, time: now, name, content: text });
+    return `🚨 異常事件已登錄\n事件編號：${id}\n回報人：${name}\n時間：${now}\n\n${text}`;
   }
 
-  if (text.startsWith("交接回報")) {
-    const content = text.replace(/^交接回報/, "").trim();
-    memory.handovers.push({ time: now, name, content });
-    return `📋 交接回報已登錄\n回報人：${name}\n時間：${now}\n內容：${content || "未填寫"}`;
+  if (text.startsWith("交接回報內容")) {
+    records.handovers.push({ time: now, name, content: text });
+    return `📋 交接回報已登錄\n回報人：${name}\n時間：${now}\n\n${text}`;
   }
 
-  if (text.startsWith("車位查詢")) {
-    const keyword = text.replace(/^車位查詢/, "").trim();
-    memory.parkingQueries.push({ time: now, name, keyword });
+  if (text.startsWith("車位查詢內容")) {
+    const keyword = text.replace("車位查詢內容", "").replace("：", "").trim();
+    records.parkingQueries.push({ time: now, name, keyword });
     return parkingSearch(keyword);
   }
 
-  if (text === "今日紀錄" || text === "六表" || text === "6表") {
-    return summary();
+  if (text.startsWith("報修 ")) {
+    const content = text.replace(/^報修\s*/, "");
+    const id = `R-${dateId()}-${String(records.repairs.length + 1).padStart(3, "0")}`;
+    records.repairs.push({ id, time: now, name, content });
+    return `✅ 報修已建立\n案件編號：${id}\n回報人：${name}\n時間：${now}\n內容：${content}`;
+  }
+
+  if (text.startsWith("異常事件 ")) {
+    const content = text.replace(/^異常事件\s*/, "");
+    const id = `E-${dateId()}-${String(records.incidents.length + 1).padStart(3, "0")}`;
+    records.incidents.push({ id, time: now, name, content });
+    return `🚨 異常事件已登錄\n事件編號：${id}\n回報人：${name}\n時間：${now}\n內容：${content}`;
+  }
+
+  if (text.startsWith("車位查詢 ")) {
+    const keyword = text.replace(/^車位查詢\s*/, "");
+    records.parkingQueries.push({ time: now, name, keyword });
+    return parkingSearch(keyword);
+  }
+
+  if (text.startsWith("上哨 ")) {
+    const content = text.replace(/^上哨\s*/, "");
+    records.duty.push({ time: now, name, content });
+    return `✅ 上哨已登錄\n人員：${name}\n時間：${now}\n內容：${content}`;
+  }
+
+  if (text.startsWith("休息離哨 ")) {
+    const content = text.replace(/^休息離哨\s*/, "");
+    records.leave.push({ time: now, name, content });
+    return `✅ 休息離哨已登錄\n人員：${name}\n時間：${now}\n內容：${content}`;
+  }
+
+  if (text.startsWith("交接回報 ")) {
+    const content = text.replace(/^交接回報\s*/, "");
+    records.handovers.push({ time: now, name, content });
+    return `📋 交接回報已登錄\n回報人：${name}\n時間：${now}\n內容：${content}`;
   }
 
   return null;
 }
 
+function templateRepair() {
+  return `🔧【報修登錄】
+
+請複製以下格式填寫後送出：
+
+報修內容
+戶別：
+位置：
+類別：
+問題說明：
+是否急件：
+處理人員：
+備註：`;
+}
+
+function templateParking() {
+  return `🚗【車位查詢】
+
+請輸入：
+
+車位查詢內容：B2-124
+
+也可以輸入：
+車位查詢 B2-124
+車位查詢 A3-22
+車位查詢 267`;
+}
+
+function templateIncident() {
+  return `🚨【異常事件回報】
+
+請複製以下格式填寫後送出：
+
+異常事件內容
+時間：
+地點：
+事件類別：
+事件內容：
+處理情形：
+是否通知經理：
+備註：`;
+}
+
+function templateHandover() {
+  return `📋【交接回報】
+
+請複製以下格式填寫後送出：
+
+交接回報內容
+班別：
+回報人：
+今日重點：
+未完成事項：
+需追蹤事項：
+異常提醒：
+備註：`;
+}
+
+function mainMenu() {
+  return `夏沐物業LINE系統
+
+點選圖文選單即可使用：
+
+報修：回覆填寫格式
+休息離哨：直接登記
+上哨：直接登記
+車位查詢：回覆查詢格式
+異常事件：回覆填寫格式
+交接回報：回覆填寫格式
+
+查統計：6表`;
+}
+
 function parkingSearch(keyword) {
   if (!keyword) {
-    return `🚗 車位查詢\n請輸入：車位查詢 B2-124\n或：車位查詢 A3-22`;
+    return `請輸入查詢內容，例如：\n車位查詢 B2-124`;
   }
 
   const data = [
@@ -123,33 +264,22 @@ function parkingSearch(keyword) {
     x.moto.includes(keyword)
   );
 
-  if (!found.length) return `查無資料：${keyword}\n請確認戶別、門牌、汽車位或機車位。`;
+  if (!found.length) return `查無車位資料：${keyword}`;
 
   return found.map(x =>
-    `🚗 車位查詢結果\n戶別：${x.unit}\n門牌：${x.door}\n所有權人：${x.owner}\n汽車位：${x.car}\n機車位：${x.moto}`
+    `🚗【車位查詢結果】\n戶別：${x.unit}\n門牌：${x.door}\n所有權人：${x.owner}\n汽車位：${x.car}\n機車位：${x.moto}`
   ).join("\n\n");
 }
 
 function summary() {
-  return `📊 今日6表紀錄\n\n` +
-    `1. 報修：${memory.repairs.length}筆\n` +
-    `2. 休息離哨：${memory.leave.length}筆\n` +
-    `3. 上哨：${memory.duty.length}筆\n` +
-    `4. 異常事件：${memory.incidents.length}筆\n` +
-    `5. 交接回報：${memory.handovers.length}筆\n` +
-    `6. 車位查詢：${memory.parkingQueries.length}筆\n\n` +
-    `輸入「報修 A3-18 水龍頭漏水」即可登錄。`;
-}
+  return `📊【今日6表紀錄】
 
-function menu() {
-  return `請輸入以下格式：\n\n` +
-    `1. 報修 A3-18 水龍頭漏水\n` +
-    `2. 休息離哨 王員 用餐30分鐘 代理人李員\n` +
-    `3. 上哨 王員 早班\n` +
-    `4. 異常事件 B1車道住戶臨停爭議\n` +
-    `5. 交接回報 今日B1車道臨停需追蹤\n` +
-    `6. 車位查詢 B2-124\n\n` +
-    `查今日統計請輸入：6表`;
+1. 報修：${records.repairs.length} 筆
+2. 休息離哨：${records.leave.length} 筆
+3. 上哨：${records.duty.length} 筆
+4. 車位查詢：${records.parkingQueries.length} 筆
+5. 異常事件：${records.incidents.length} 筆
+6. 交接回報：${records.handovers.length} 筆`;
 }
 
 async function getDisplayName(userId) {
@@ -167,13 +297,10 @@ function reply(replyToken, text) {
 
 function dateId() {
   const d = new Date();
-  const yy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${yy}${mm}${dd}`;
+  return `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,"0")}${String(d.getDate()).padStart(2,"0")}`;
 }
 
 const port = process.env.PORT || 3000;
 app.listen(port, () => {
-  console.log(`Xiamu LINE Bot V2 running on port ${port}`);
+  console.log(`Xiamu LINE Bot V4 running on port ${port}`);
 });
