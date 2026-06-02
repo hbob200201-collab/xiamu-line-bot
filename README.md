@@ -1,33 +1,19 @@
-# 遠雄夏沐物業 LINE Bot A版
+# 遠雄夏沐物業 LINE Bot V2 六表版
 
-功能：
-- 保全輸入回報
-- Bot 自動同步推播給經理
-- 支援：報修、休息離哨、上哨、異常事件、交接回報
+包含：
+1. 報修
+2. 休息離哨
+3. 上哨
+4. 異常事件
+5. 交接回報
+6. 車位查詢
 
-## LINE 使用方式
+測試指令：
+- 報修 A3-18 水龍頭漏水
+- 休息離哨 王員 用餐30分鐘 代理人李員
+- 上哨 王員 早班
+- 異常事件 B1車道住戶臨停爭議
+- 交接回報 今日B1車道臨停需追蹤
+- 車位查詢 B2-124
+- 6表
 
-保全輸入：
-
-異常事件 B1車道住戶臨停爭議
-
-經理會收到：
-
-【異常事件】
-人員：保全LINE名稱
-時間：目前時間
-內容：異常事件 B1車道住戶臨停爭議
-
-## Render 環境變數
-
-CHANNEL_SECRET=你的 LINE Channel Secret
-CHANNEL_ACCESS_TOKEN=你的 LINE Channel Access Token
-MANAGER_USER_ID=經理的 LINE User ID
-
-## Webhook URL
-
-部署完成後，在 LINE Developers 填：
-
-https://你的render網址.onrender.com/webhook
-
-並開啟 Use webhook。
