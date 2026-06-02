@@ -1,0 +1,16 @@
+{
+  "name": "xiamu-line-bot-a",
+  "version": "1.0.0",
+  "description": "遠雄夏沐物業 LINE 回報同步經理 Bot",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@line/bot-sdk": "^9.5.0",
+    "express": "^4.19.2"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
