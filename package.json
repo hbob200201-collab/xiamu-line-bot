@@ -1,7 +1,7 @@
 {
-  "name": "xiamu-line-bot-v9-official-parking-data",
-  "version": "9.0.0",
-  "description": "遠雄夏沐物業 LINE Bot V9 正式車位資料匯入版",
+  "name": "xiamu-line-bot-v10-admin-integrated",
+  "version": "10.0.0",
+  "description": "遠雄夏沐物業 LINE Bot V10 後台整合版",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
